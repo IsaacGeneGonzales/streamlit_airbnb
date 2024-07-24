@@ -1,47 +1,49 @@
-from snowflake.snowpark import Session
-from snowflake.snowpark.exceptions import SnowparkSQLException
+from snowflake.connector import connect
 import pandas as pd
 import config
 import streamlit as st
 
-@st.cache_data
-def load_data(table_type):
-    try:
-        # Set up your Snowflake connection parameters
-        connection_param = {
-            "account": config.SNOWFLAKE_ACCOUNT,
-            "user": config.SNOWFLAKE_USER,
-            "password": config.SNOWFLAKE_PASSWORD,
-            "role": config.SNOWFLAKE_ROLE,
-            "database": config.SNOWFLAKE_DATABASE,
-            "schema": config.SNOWFLAKE_SCHEMA
-        }
-        # creating a session object
-        session = Session.builder.configs(connection_param).create()
+# Cache the query data for efficiency
+@st.cache_data 
+# Setup and fetch data from Snowflake data warehouse
+def fetch_data(table_type):
 
-        # print values from session object to test
-        print("\n\t Connection successful!")
-
-        if table_type == 'listing':
-            main_table = session.table("TEST_DB.PUBLIC.LISTING_VIEW").to_pandas()
-            main_table = main_table.dropna()
-        elif table_type == 'host':
-            main_table = session.table("TEST_DB.PUBLIC.HOST_VIEW").to_pandas()
-        else:
-            print("Invalid load parameter!")
-        
-    # Error handling blocks
-    except SnowparkSQLException as e:
-        print(f"Snowpark SQL Exception: {e}")
-        main_table = pd.DataFrame()  # Return an empty DataFrame if there's an SQL error
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        main_table = pd.DataFrame()  # Return an empty DataFrame if there's a general error
-    finally:
+    sf_conn = connect(
+        user=config.SNOWFLAKE_USER,
+        password=config.SNOWFLAKE_PASSWORD,
+        account=config.SNOWFLAKE_ACCOUNT,
+        warehouse=config.SNOWFLAKE_WAREHOUSE,
+        database=config.SNOWFLAKE_DATABASE,
+        schema=config.SNOWFLAKE_SCHEMA,
+        role=config.SNOWFLAKE_ROLE  
+    )
+    def get_table(sf_conn, snowflake_table):
         try:
-            session.close()
+            with sf_conn.cursor() as sf_cursor:
+                sf_cursor.execute(f"SELECT * FROM {snowflake_table}")
+                # Fetch all rows as a list of tuples
+                rows = sf_cursor.fetchall()
+                
+                # Get column names from the cursor description
+                columns = [desc[0] for desc in sf_cursor.description]
+                
+                # Convert the list of tuples into a pandas DataFrame
+                df = pd.DataFrame(rows, columns=columns)
+                
+            return df
         except Exception as e:
-            print(f"Failed to close session: {e}")
+            print(f"Error fetching data from Snowflake: {e}")
+            return pd.DataFrame()  # Return an empty DataFrame in case of error
 
+    # Fetch tables based on function parameters
+    if table_type == 'listing':
+        main_table = get_table(sf_conn, "TEST_DB.PUBLIC.LISTING_VIEW")
+        main_table = main_table.dropna()
+    elif table_type == 'host':
+        main_table = get_table(sf_conn, "TEST_DB.PUBLIC.HOST_VIEW")
+    else:
+        print("Invalid load parameter!")
+        main_table = pd.DataFrame()  # Return an empty DataFrame for invalid table type
+    
+    sf_conn.close()
     return main_table
-
