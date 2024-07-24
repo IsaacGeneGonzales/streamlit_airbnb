@@ -4,8 +4,8 @@ from tabs.data_page import display_listings
 from tabs.dashboard import display_dashboard
 
 st. set_page_config(layout="wide")
-st.title('PROPERTY LOGDING APP')
-tab_names = ["Home", "Listing and Host Tables", "Dashboard"]
+st.title('AIRBNB LISTINGS')
+tab_names = ["Home", "View tables", "Explore and Visualize"]
 tabs = st.tabs(tab_names)
 
 # Call the respective function based on the selected tab
